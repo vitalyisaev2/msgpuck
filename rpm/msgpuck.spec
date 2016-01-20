@@ -5,7 +5,7 @@ Summary: MsgPack binary serialization library in a self-contained header
 Group: Development/Libraries
 License: BSD
 URL: https://github.com/rtsisyk/msgpuck
-Source0: https://github.com/rtsisyk/msgpuck/archive/%{version}/msgpuck-%{version}.tar.gz
+Source0: msgpuck-%{version}.tar.gz
 BuildRequires: cmake >= 2.8
 BuildRequires: doxygen >= 1.7.0
 
