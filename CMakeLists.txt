@@ -20,7 +20,7 @@ include(GNUInstallDirs)
 
 add_subdirectory(test)
 
-add_library(${PROJECT_NAME} STATIC msgpuck.c)
+add_library(${PROJECT_NAME} STATIC msgpuck.c mpstream.c)
 set_target_properties(${PROJECT_NAME} PROPERTIES VERSION 1.0 SOVERSION 1)
 set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "msgpuck")
 
@@ -30,6 +30,7 @@ install(TARGETS ${PROJECT_NAME}
     COMPONENT library)
 
 install(FILES msgpuck.h DESTINATION include)
+install(FILES mpstream.h DESTINATION include)
 
 find_package(Doxygen)
 if(NOT DOXYGEN_FOUND)

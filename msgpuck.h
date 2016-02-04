@@ -876,6 +876,10 @@ mp_vformat(char *data, size_t data_size, const char *format, va_list args);
 MP_PROTO __attribute__((pure)) ptrdiff_t
 mp_check_strl(const char *cur, const char *end);
 
+/* TODO: document this */
+MP_PROTO __attribute__((pure)) ptrdiff_t
+mp_check_str(const char *cur, const char *end);
+
 /**
  * \brief Check that \a cur buffer has enough bytes to decode a binstring header
  * \param cur buffer
@@ -887,6 +891,10 @@ mp_check_strl(const char *cur, const char *end);
  */
 MP_PROTO __attribute__((pure)) ptrdiff_t
 mp_check_binl(const char *cur, const char *end);
+
+/* TODO: document this */
+MP_PROTO __attribute__((pure)) ptrdiff_t
+mp_check_bin(const char *cur, const char *end);
 
 /**
  * \brief Decode a length of a string from MsgPack \a data
@@ -1011,6 +1019,38 @@ mp_check_bool(const char *cur, const char *end);
  */
 MP_PROTO bool
 mp_decode_bool(const char **data);
+
+/* TODO: document this */
+MP_PROTO __attribute__((const)) uint32_t
+mp_sizeof_extl(uint32_t len);
+
+/* TODO: document this */
+MP_PROTO __attribute__((const)) size_t
+mp_sizeof_ext(uint32_t len);
+
+/* TODO: document this */
+MP_PROTO uint32_t
+mp_decode_extl(const char **data);
+
+/* TODO: document this */
+MP_PROTO const char *
+mp_decode_ext(const char **data, uint32_t *len, uint8_t *type);
+
+/* TODO: document this */
+MP_PROTO __attribute__((pure)) ptrdiff_t
+mp_check_extl(const char *cur, const char *end);
+
+/* TODO: document this */
+MP_PROTO __attribute__((pure)) ptrdiff_t
+mp_check_ext(const char *cur, const char *end);
+
+/* TODO: document this */
+MP_PROTO char *
+mp_encode_extl(char *data, uint32_t len);
+
+/* TODO: document this */
+MP_PROTO char *
+mp_encode_ext(char *data, const char *val, uint32_t len, uint8_t type);
 
 /**
  * \brief Skip one element in a packed \a data.
@@ -1561,26 +1601,78 @@ mp_check_strl(const char *cur, const char *end)
 	assert(mp_typeof(*cur) == MP_STR);
 
 	uint8_t c = mp_load_u8(&cur);
-	if (mp_likely(c & ~0x1f) == 0xa0)
+	if (mp_likely((c & ~0x1f) == 0xa0))
 		return cur - end;
 
 	assert(c >= 0xd9 && c <= 0xdb); /* must be checked above by mp_typeof */
-	uint32_t hsize = 1U << (c & 0x3) >> 1; /* 0xd9->1, 0xda->2, 0xdb->4 */
+	uint32_t hsize = 1U << (c & 0x03) >> 1; /* 0xd9->1, 0xda->2, 0xdb->4 */
+	return hsize - (end - cur);
+}
+
+MP_IMPL ptrdiff_t
+mp_check_str(const char *cur, const char *end)
+{
+	assert(cur < end);
+	assert(mp_typeof(*cur) == MP_STR);
+
+	uint8_t c = mp_load_u8(&cur);
+	if (mp_likely((c & ~0x1f) == 0xa0))
+		return (c - 0x9f) - (ptrdiff_t )(cur - end);
+
+	assert(c >= 0xd9 && c <= 0xdb); /* must be checked above by mp_typeof */
+	uint32_t hsize = 1U << (c & 0x03) >> 1; /* 0xd9->1, 0xda->2, 0xdb->4 */
+	switch (hsize) {
+	case 1:
+		hsize = mp_load_u8(&cur);
+		break;
+	case 2:
+		hsize = mp_load_u16(&cur);
+		break;
+	case 4:
+		hsize = mp_load_u32(&cur);
+		break;
+	default:
+		mp_unreachable();
+	};
 	return hsize - (end - cur);
 }
 
 MP_IMPL ptrdiff_t
 mp_check_binl(const char *cur, const char *end)
 {
-	uint8_t c = mp_load_u8(&cur);
 	assert(cur < end);
+	uint8_t c = mp_load_u8(&cur);
 	assert(mp_typeof(c) == MP_BIN);
 
 	assert(c >= 0xc4 && c <= 0xc6); /* must be checked above by mp_typeof */
-	uint32_t hsize = 1U << (c & 0x3); /* 0xc4->1, 0xc5->2, 0xc6->4 */
+	uint32_t hsize = 1U << (c & 0x03); /* 0xc4->1, 0xc5->2, 0xc6->4 */
 	return hsize - (end - cur);
 }
 
+MP_IMPL ptrdiff_t
+mp_check_bin(const char *cur, const char *end)
+{
+	assert(cur < end);
+	uint8_t c = mp_load_u8(&cur);
+	assert(mp_typeof(c) == MP_BIN);
+
+	assert(c >= 0xc4 && c <= 0xc6); /* must be checked above by mp_typeof */
+	uint32_t hsize = 1U << (c & 0x03); /* 0xd9->1, 0xda->2, 0xdb->4 */
+	switch (hsize) {
+	case 1:
+		hsize = mp_load_u8(&cur);
+		break;
+	case 2:
+		hsize = mp_load_u16(&cur);
+		break;
+	case 4:
+		hsize = mp_load_u32(&cur);
+		break;
+	default:
+		mp_unreachable();
+	};
+	return hsize - (end - cur);
+}
 MP_IMPL uint32_t
 mp_decode_strl(const char **data)
 {
@@ -1701,6 +1793,127 @@ mp_decode_bool(const char **data)
 		mp_unreachable();
 	}
 }
+
+MP_IMPL uint32_t
+mp_sizeof_extl(uint32_t len)
+{
+	if (len == 1 || len == 2 || len == 4 || len == 8 || len == 16) {
+		return 1;
+	} else if (len <= UINT8_MAX) {
+		return 1 + sizeof(uint8_t);
+	} else if (len <= UINT16_MAX) {
+		return 1 + sizeof(uint16_t);
+	} else {
+		return 1 + sizeof(uint32_t);
+	}
+}
+
+MP_IMPL size_t
+mp_sizeof_ext(uint32_t len)
+{
+	return mp_sizeof_extl(len) + 1 + len;
+}
+
+MP_IMPL uint32_t
+mp_decode_extl(const char **data)
+{
+	uint8_t c = mp_load_u8(data);
+	switch (c) {
+	case 0xd4 ... 0xd8:
+		return 1 << (c - 0xd4);
+	case 0xc7:
+		return mp_load_u8(data);
+	case 0xc8:
+		return mp_load_u16(data);
+	case 0xc9:
+		return mp_load_u32(data);
+	default:
+		mp_unreachable();
+	}
+}
+
+MP_IMPL const char *
+mp_decode_ext(const char **data, uint32_t *len, uint8_t *type)
+{
+	assert(len != NULL && type != NULL);
+	*len = mp_decode_extl(data);
+	*type = mp_load_u8(data);
+	const char *val = *data;
+	*data += *len;
+	return val;
+}
+
+MP_IMPL ptrdiff_t
+mp_check_extl(const char *cur, const char *end)
+{
+	assert(cur < end);
+	assert(mp_typeof(*cur) == MP_EXT);
+
+	uint8_t c = mp_load_u8(&cur);
+	if (mp_likely((c & ~0x0f) == 0xd0))
+		return (end - cur);
+
+	assert(c >= 0xc7 && c <= 0xc9); /* must be checked above by mp_typeof */
+	uint32_t hsize = 1U << ((c + 1) & 0x03); /* 0xc7->1, 0xc5->2, 0xc6->4*/
+	return hsize - (end - cur);
+}
+
+MP_IMPL ptrdiff_t
+mp_check_ext(const char *cur, const char *end)
+{
+	assert(cur < end);
+	assert(mp_typeof(*cur) == MP_EXT);
+
+	uint8_t c = mp_load_u8(&cur);
+	if (mp_likely((c & ~0x0f) == 0xd0))
+		return (((c & 0xd4 + 1) << 2) + 1) - (end - cur);
+
+	assert(c >= 0xc7 && c <= 0xc9); /* must be checked above by mp_typeof */
+	uint32_t hsize = 1U << ((c + 1) & 0x03); /* 0xc7->1, 0xc5->2, 0xc6->4*/
+	switch (hsize) {
+	case 1:
+		hsize = mp_load_u8(&cur);
+		break;
+	case 2:
+		hsize = mp_load_u16(&cur);
+		break;
+	case 4:
+		hsize = mp_load_u32(&cur);
+		break;
+	default:
+		mp_unreachable();
+	};
+	return (hsize + 1) - (end - cur);
+}
+
+MP_IMPL char *
+mp_encode_extl(char *data, uint32_t len)
+{
+	if (len == 1 || len == 2 || len == 4 || len == 8 || len == 16) {
+		int depth = 0;
+		for (; len > 1; ++depth) len = len<<1;
+		return mp_store_u8(data, 0xd4 + depth);
+	} else if (len <= UINT8_MAX) {
+		data = mp_store_u8(data, 0xc7);
+		return mp_store_u8(data, len);
+	} else if (len <= UINT16_MAX) {
+		data = mp_store_u8(data, 0xc8);
+		return mp_store_u16(data, len);
+	} else {
+		data = mp_store_u8(data, 0xc9);
+		return mp_store_u32(data, len);
+	}
+}
+
+MP_IMPL char *
+mp_encode_ext(char *data, const char *val, uint32_t len, uint8_t type)
+{
+	data = mp_encode_extl(data, len);
+	data = mp_store_u8(data, type);
+	memcpy(data, val, len);
+	return data + len;
+}
+
 
 /** See mp_parser_hint */
 enum {
