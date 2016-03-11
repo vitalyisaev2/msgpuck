@@ -1,3 +1,20 @@
+msgpuck (1.0.2-3-g2279eb5) utopic; urgency=medium
+
+  [ Dmitry E. Oboukhov ]
+  * + tarball target in debian/rules, .gitignore
+
+  [ Roman Tsisyk ]
+  * Spelling fixes in RPM spec
+  * Fix GCC 6.0 and Doxygen warnings
+  * RPM: review fixes
+  * Update the list of supported OS for tarantool/build
+  * Fix -Wsign-compare, enable -Werror, set BUILD_TYPE=Debug by default
+  * Use /usr/bin/prove to run tests
+
+  [ Dmitry E. Oboukhov ]
+
+ -- Dmitry E. Oboukhov <autobuilder@033624f54e93>  Fri, 11 Mar 2016 12:56:40 +0300
+
 msgpuck (1.0.1-1) unstable; urgency=medium
 
   * Initial release. (Closes: #811167)
